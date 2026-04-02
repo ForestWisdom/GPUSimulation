@@ -7,14 +7,19 @@ from typing import Any, Mapping
 
 from predictor.analytical import (
     AnalyticalBaselineLatencyEstimator,
+    AnalyticalPipelineFeatureAnalyzer,
     AnalyticalSchedulingSimulator,
     AnalyticalTaskDecomposer,
-    PlaceholderPipelineFeatureAnalyzer,
 )
 from predictor.extractor import PlaceholderMetadataExtractor
 from predictor.models import PlaceholderResidualModel, PlaceholderUncertaintyModel
 from predictor.recognizer import HeuristicKernelRecognizer
-from predictor.types import KernelMetadata, LatencyPrediction
+from predictor.types import (
+    DEFAULT_DEVICE_PROFILE,
+    DeviceProfile,
+    KernelMetadata,
+    LatencyPrediction,
+)
 
 
 @dataclass
@@ -25,22 +30,29 @@ class KernelLatencyPredictor:
     recognizer: HeuristicKernelRecognizer
     decomposer: AnalyticalTaskDecomposer
     scheduler: AnalyticalSchedulingSimulator
-    feature_analyzer: PlaceholderPipelineFeatureAnalyzer
+    feature_analyzer: AnalyticalPipelineFeatureAnalyzer
     baseline_estimator: AnalyticalBaselineLatencyEstimator
     residual_model: PlaceholderResidualModel
     uncertainty_model: PlaceholderUncertaintyModel
 
     @classmethod
-    def default(cls) -> "KernelLatencyPredictor":
+    def default(
+        cls,
+        device_profile: DeviceProfile = DEFAULT_DEVICE_PROFILE,
+    ) -> "KernelLatencyPredictor":
         """Build the default predictor stack."""
 
         return cls(
             extractor=PlaceholderMetadataExtractor(),
             recognizer=HeuristicKernelRecognizer(),
             decomposer=AnalyticalTaskDecomposer(),
-            scheduler=AnalyticalSchedulingSimulator(),
-            feature_analyzer=PlaceholderPipelineFeatureAnalyzer(),
-            baseline_estimator=AnalyticalBaselineLatencyEstimator(),
+            scheduler=AnalyticalSchedulingSimulator(device_profile=device_profile),
+            feature_analyzer=AnalyticalPipelineFeatureAnalyzer(
+                device_profile=device_profile,
+            ),
+            baseline_estimator=AnalyticalBaselineLatencyEstimator(
+                device_profile=device_profile,
+            ),
             residual_model=PlaceholderResidualModel(),
             uncertainty_model=PlaceholderUncertaintyModel(),
         )

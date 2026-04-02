@@ -56,12 +56,95 @@ class KernelMetadata:
     extra: dict[str, str | int | float | bool] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class DeviceProfile:
+    """Hardware profile used by analytical schedulers and estimators."""
+
+    name: str
+    sm_count: int
+    memory_bandwidth_bytes_per_s: float
+    simt_flops_per_s: float
+    tensor_core_flops_per_s: float
+    simt_tile_m: int = 64
+    simt_tile_n: int = 64
+    tensor_core_tile_m: int = 128
+    tensor_core_tile_n: int = 128
+    simt_launch_overhead_ms: float = 0.014
+    tensor_core_launch_overhead_ms: float = 0.010
+    simt_wave_penalty_ms: float = 0.006
+    tensor_core_wave_penalty_ms: float = 0.003
+
+    def tile_shape_for(self, use_tensor_cores: bool) -> tuple[int, int]:
+        """Return the analytical output tile shape for a kernel path."""
+
+        if use_tensor_cores:
+            return self.tensor_core_tile_m, self.tensor_core_tile_n
+        return self.simt_tile_m, self.simt_tile_n
+
+    def peak_flops_for(self, use_tensor_cores: bool) -> float:
+        """Return the peak compute throughput for a kernel path."""
+
+        if use_tensor_cores:
+            return self.tensor_core_flops_per_s
+        return self.simt_flops_per_s
+
+    def launch_overhead_ms_for(self, use_tensor_cores: bool) -> float:
+        """Return the launch overhead for a kernel path."""
+
+        if use_tensor_cores:
+            return self.tensor_core_launch_overhead_ms
+        return self.simt_launch_overhead_ms
+
+    def wave_penalty_ms_for(self, use_tensor_cores: bool) -> float:
+        """Return the per-wave penalty for a kernel path."""
+
+        if use_tensor_cores:
+            return self.tensor_core_wave_penalty_ms
+        return self.simt_wave_penalty_ms
+
+
+DEFAULT_DEVICE_PROFILE = DeviceProfile(
+    name="nvidia_h100_sxm",
+    sm_count=108,
+    memory_bandwidth_bytes_per_s=1.555e12,
+    simt_flops_per_s=19.5e12,
+    tensor_core_flops_per_s=312e12,
+)
+
+
 def is_gemm_bmm_kernel(metadata: KernelMetadata) -> bool:
     """Return whether metadata describes a GEMM/BMM-style kernel."""
 
     if metadata.family_hint is KernelFamily.GEMM_BMM:
         return True
     return {"m", "n", "k"}.issubset(metadata.dimensions)
+
+
+def uses_tensor_cores(metadata: KernelMetadata) -> bool:
+    """Return whether GEMM/BMM metadata matches the tensor-core path."""
+
+    dtype = metadata.dtype.lower()
+    if dtype not in {"fp16", "bf16", "half"}:
+        return False
+
+    m = int(metadata.dimensions.get("m", 0))
+    n = int(metadata.dimensions.get("n", 0))
+    k = int(metadata.dimensions.get("k", 0))
+    if min(m, n, k) <= 0:
+        return False
+
+    return all(dimension % 16 == 0 for dimension in (m, n, k))
+
+
+def dtype_size_bytes(dtype: str) -> int:
+    """Return the byte width for a kernel datatype."""
+
+    dtype_key = dtype.lower()
+    if dtype_key in {"fp16", "bf16", "half"}:
+        return 2
+    if dtype_key in {"fp32", "float32"}:
+        return 4
+    return 4
 
 
 @dataclass(frozen=True)

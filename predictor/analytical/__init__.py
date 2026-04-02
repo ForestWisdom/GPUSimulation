@@ -11,6 +11,7 @@ from predictor.analytical.decomposer import (
     TaskDecomposer,
 )
 from predictor.analytical.features import (
+    AnalyticalPipelineFeatureAnalyzer,
     PipelineFeatureAnalyzer,
     PlaceholderPipelineFeatureAnalyzer,
 )
@@ -22,6 +23,7 @@ from predictor.analytical.scheduler import (
 
 __all__ = [
     "AnalyticalBaselineLatencyEstimator",
+    "AnalyticalPipelineFeatureAnalyzer",
     "AnalyticalSchedulingSimulator",
     "AnalyticalTaskDecomposer",
     "BaselineLatencyEstimator",

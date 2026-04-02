@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import math
 from typing import Protocol
 
 from predictor.types import (
     BaselineEstimate,
+    DEFAULT_DEVICE_PROFILE,
+    DeviceProfile,
     FeatureVector,
     KernelMetadata,
     ScheduleEstimate,
     TaskPlan,
     is_gemm_bmm_kernel,
+    uses_tensor_cores,
 )
 
 
@@ -50,10 +52,14 @@ class PlaceholderBaselineLatencyEstimator:
 class AnalyticalBaselineLatencyEstimator:
     """Estimate GEMM/BMM latency with a lightweight analytical model."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        device_profile: DeviceProfile = DEFAULT_DEVICE_PROFILE,
+    ) -> None:
         """Initialize the estimator with a placeholder fallback path."""
 
         self._fallback = PlaceholderBaselineLatencyEstimator()
+        self.device_profile = device_profile
 
     def estimate(
         self,
@@ -64,57 +70,51 @@ class AnalyticalBaselineLatencyEstimator:
     ) -> BaselineEstimate:
         """Estimate a baseline latency before learned corrections."""
 
-        del plan, features
+        del plan
         if not is_gemm_bmm_kernel(metadata):
-            return self._fallback.estimate(metadata, TaskPlan(metadata.name, ()), schedule, FeatureVector({}))
+            return self._fallback.estimate(
+                metadata,
+                TaskPlan(metadata.name, ()),
+                schedule,
+                FeatureVector({}),
+            )
 
-        batch = max(1, int(metadata.dimensions.get("batch", 1)))
-        m = max(1, int(metadata.dimensions.get("m", 1)))
-        n = max(1, int(metadata.dimensions.get("n", 1)))
-        k = max(1, int(metadata.dimensions.get("k", 1)))
-        dtype_size_bytes = _dtype_size_bytes(metadata.dtype)
-        total_flops = 2.0 * batch * m * n * k
-        total_bytes = dtype_size_bytes * batch * ((m * k) + (k * n) + (m * n))
+        use_tensor_cores = bool(
+            features.values.get("uses_tensor_cores", float(uses_tensor_cores(metadata))),
+        )
+        total_flops = features.values.get("flops", 0.0)
+        total_bytes = features.values.get("bytes", 0.0)
+        compute_throughput = features.values.get(
+            "peak_compute_flops",
+            self.device_profile.peak_flops_for(use_tensor_cores),
+        )
+        memory_bandwidth = features.values.get(
+            "memory_bandwidth_bytes_per_s",
+            self.device_profile.memory_bandwidth_bytes_per_s,
+        )
+        arithmetic_intensity = features.values.get("arithmetic_intensity", 0.0)
 
-        tensor_core = _is_tensor_core_path(metadata)
-        compute_throughput = 312e12 if tensor_core else 19.5e12
-        memory_bandwidth = 1.555e12
-        compute_ms = (total_flops / compute_throughput) * 1e3
+        compute_ms = (total_flops / compute_throughput) * 1e3 if compute_throughput else 0.0
         memory_ms = (total_bytes / memory_bandwidth) * 1e3
-        wave_penalty_ms = schedule.estimated_waves * (0.003 if tensor_core else 0.006)
-        launch_overhead_ms = 0.010 if tensor_core else 0.014
+        wave_penalty_ms = (
+            schedule.estimated_waves
+            * self.device_profile.wave_penalty_ms_for(use_tensor_cores)
+        )
+        launch_overhead_ms = self.device_profile.launch_overhead_ms_for(
+            use_tensor_cores,
+        )
 
         latency_ms = max(compute_ms, memory_ms) + wave_penalty_ms + launch_overhead_ms
+        path_name = "tensor_core" if use_tensor_cores else "simt"
         return BaselineEstimate(
             latency_ms=round(latency_ms, 4),
             notes=(
-                "gemm_bmm analytical baseline; "
+                f"device={self.device_profile.name}; "
+                f"path={path_name}; "
                 f"compute_ms={compute_ms:.6f}; "
                 f"memory_ms={memory_ms:.6f}; "
+                f"arithmetic_intensity={arithmetic_intensity:.6f}; "
                 f"waves={schedule.estimated_waves}; "
                 f"tile_count={schedule.tile_count}"
             ),
         )
-
-
-def _dtype_size_bytes(dtype: str) -> int:
-    """Return the byte width for a kernel datatype."""
-
-    dtype_key = dtype.lower()
-    if dtype_key in {"fp16", "bf16", "half"}:
-        return 2
-    if dtype_key in {"fp32", "float32"}:
-        return 4
-    return 4
-
-
-def _is_tensor_core_path(metadata: KernelMetadata) -> bool:
-    """Return whether the analytical model should use tensor-core assumptions."""
-
-    dtype = metadata.dtype.lower()
-    if dtype not in {"fp16", "bf16", "half"}:
-        return False
-    m = int(metadata.dimensions.get("m", 0))
-    n = int(metadata.dimensions.get("n", 0))
-    k = int(metadata.dimensions.get("k", 0))
-    return min(m, n, k) > 0 and all(dimension % 16 == 0 for dimension in (m, n, k))

@@ -5,7 +5,15 @@ from __future__ import annotations
 import math
 from typing import Protocol
 
-from predictor.types import KernelMetadata, ScheduleEstimate, TaskPlan, is_gemm_bmm_kernel
+from predictor.types import (
+    DEFAULT_DEVICE_PROFILE,
+    DeviceProfile,
+    KernelMetadata,
+    ScheduleEstimate,
+    TaskPlan,
+    is_gemm_bmm_kernel,
+    uses_tensor_cores,
+)
 
 
 class SchedulingSimulator(Protocol):
@@ -34,10 +42,14 @@ class PlaceholderSchedulingSimulator:
 class AnalyticalSchedulingSimulator:
     """Estimate GEMM/BMM wave count from threadblock tiling."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        device_profile: DeviceProfile = DEFAULT_DEVICE_PROFILE,
+    ) -> None:
         """Initialize the simulator with a placeholder fallback path."""
 
         self._fallback = PlaceholderSchedulingSimulator()
+        self.device_profile = device_profile
 
     def simulate(self, plan: TaskPlan, metadata: KernelMetadata) -> ScheduleEstimate:
         """Simulate a kernel task plan and return schedule estimates."""
@@ -45,11 +57,14 @@ class AnalyticalSchedulingSimulator:
         if not is_gemm_bmm_kernel(metadata):
             return self._fallback.simulate(plan, metadata)
 
-        tile_m, tile_n = _select_output_tile_shape(metadata)
+        del plan
+        tile_m, tile_n = self.device_profile.tile_shape_for(
+            uses_tensor_cores(metadata),
+        )
         batch = int(metadata.dimensions.get("batch", 1))
         m = max(1, int(metadata.dimensions.get("m", 1)))
         n = max(1, int(metadata.dimensions.get("n", 1)))
-        sm_count = max(1, int(metadata.extra.get("sm_count", 108)))
+        sm_count = max(1, self.device_profile.sm_count)
 
         tile_count = batch * math.ceil(m / tile_m) * math.ceil(n / tile_n)
         estimated_waves = max(1, math.ceil(tile_count / sm_count))
@@ -60,15 +75,3 @@ class AnalyticalSchedulingSimulator:
             tile_count=tile_count,
             tiles_per_wave=sm_count,
         )
-
-
-def _select_output_tile_shape(metadata: KernelMetadata) -> tuple[int, int]:
-    """Select an output tile shape for analytical wave estimation."""
-
-    dtype = metadata.dtype.lower()
-    m = int(metadata.dimensions.get("m", 0))
-    n = int(metadata.dimensions.get("n", 0))
-    k = int(metadata.dimensions.get("k", 0))
-    if dtype in {"fp16", "bf16", "half"} and (m % 16 == 0) and (n % 16 == 0) and (k % 16 == 0):
-        return 128, 128
-    return 64, 64

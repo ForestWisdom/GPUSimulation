@@ -4,11 +4,11 @@ A research prototype for single-kernel GPU latency prediction.
 
 ## v0 Scope
 
-Current repository status: Phase 2 implemented for GEMM/BMM analytical baseline only.
+Current repository status: Phase 2.5 hardened for GEMM/BMM analytical baseline only.
 
 - Single-kernel prediction only
 - No distributed inference
-- Real analytical baseline only for GEMM/BMM in Phase 2
+- Real analytical baseline only for GEMM/BMM in Phase 2.5
 - Learned residual models are not implemented yet
 - Supported kernel families in v0:
   - GEMM/BMM
@@ -65,19 +65,20 @@ conda run -n sglang python -m predictor.serving --name demo_kernel --family gemm
 
 - Added heuristic GEMM/BMM kernel bucket recognition with `gemm.tensor_core`, `gemm.simt`, `bmm.tensor_core`, and `bmm.simt` buckets.
 - Added GEMM/BMM analytical task decomposition into operand load, MMA mainloop, and output store stages.
-- Added GEMM/BMM wave estimation using output tile count and SM count.
-- Added GEMM/BMM analytical baseline latency estimation using FLOPs, memory traffic, and a wave penalty term.
-- Kept non-GEMM/BMM families on placeholder paths so Phase 2 scope stays narrow.
-- Added Phase 2 unit tests plus a dedicated Phase 2 integration test and runnable demo script.
+- Added a shared `DeviceProfile` dataclass so analytical scheduling and baseline latency estimation use explicit device assumptions rather than hard-coded constants.
+- Replaced the old placeholder pipeline feature path with a real analytical GEMM/BMM feature analyzer that emits FLOPs, bytes, arithmetic intensity, tile shape, tensor-core usage, and device-aware throughput features.
+- Wired the serving pipeline to use the real analytical feature analyzer, analytical scheduler, and analytical baseline estimator under one shared device profile.
+- Hardened tests for problem-size scaling, tensor-core versus SIMT behavior, SM-count-dependent wave estimation, and device-profile-dependent latency changes.
+- Kept non-GEMM/BMM families on placeholder paths so Phase 2.5 scope stays narrow.
 
 ## Remaining Work
 
-- Phase 3: add a lightweight learned residual head, dataset builder, training flow, and evaluation flow for GEMM/BMM.
+- Phase 3: add a lightweight learned residual head, dataset builder, training flow, evaluation flow, and mean latency correction for GEMM/BMM.
 - Phase 4: extend real logic to Attention and Vector/Fused vector kernels while reusing the same public interfaces.
 - Phase 5: replace placeholder uncertainty and aggregation behavior with real uncertainty or p90 prediction and end-to-end toy operator/model aggregation.
 
 ## Current Notes
 
-- The serving stack now produces analytical baseline latency for GEMM/BMM kernels.
-- Residual correction and uncertainty are still placeholder components and are intentionally not trained in Phase 2.
+- The serving stack now produces device-profile-aware analytical baseline latency for GEMM/BMM kernels.
+- Residual correction and uncertainty are still placeholder components and are intentionally not trained in Phase 2.5.
 - Attention, normalization, vector/fused vector, and fused MoE paths still use placeholder analytical behavior.
