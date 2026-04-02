@@ -121,27 +121,40 @@ def collect_gemm_bmm_profile_records(
     raise ValueError(f"Unsupported profiling mode: {mode}")
 
 
-def write_profile_records_jsonl(records: Iterable[dict[str, object]], path: Path) -> None:
+def write_profile_records_jsonl(
+    records: Iterable[dict[str, object]],
+    path: Path,
+    append: bool = False,
+) -> None:
     """Write profiling records to JSONL."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as file_obj:
+    file_mode = "a" if append else "w"
+    with path.open(file_mode, encoding="utf-8") as file_obj:
         for record in records:
             file_obj.write(json.dumps(record) + "\n")
 
 
-def write_profile_records_csv(records: Iterable[dict[str, object]], path: Path) -> None:
+def write_profile_records_csv(
+    records: Iterable[dict[str, object]],
+    path: Path,
+    append: bool = False,
+) -> None:
     """Write profiling records to CSV."""
 
     record_list = [_flatten_record_for_csv(record) for record in records]
     path.parent.mkdir(parents=True, exist_ok=True)
     if not record_list:
-        path.write_text("", encoding="utf-8")
+        if not append:
+            path.write_text("", encoding="utf-8")
         return
     fieldnames = sorted({key for record in record_list for key in record})
-    with path.open("w", encoding="utf-8", newline="") as file_obj:
+    file_exists = path.exists() and path.stat().st_size > 0
+    file_mode = "a" if append else "w"
+    with path.open(file_mode, encoding="utf-8", newline="") as file_obj:
         writer = csv.DictWriter(file_obj, fieldnames=fieldnames)
-        writer.writeheader()
+        if not append or not file_exists:
+            writer.writeheader()
         writer.writerows(record_list)
 
 
@@ -340,6 +353,7 @@ def _flatten_record_for_csv(record: dict[str, object]) -> dict[str, object]:
         "m": dimensions.get("m"),
         "n": dimensions.get("n"),
         "k": dimensions.get("k"),
+        "round_id": record.get("round_id"),
         "gpu_name": record["gpu_name"],
         "device_name": device_profile.get("name"),
         "sm_count": device_profile.get("sm_count"),

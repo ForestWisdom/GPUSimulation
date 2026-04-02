@@ -38,10 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--gpu-names", default="mock_gpu_a,mock_gpu_b")
+    parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument(
         "--split-mode",
         choices=("random", "device-holdout"),
         default="random",
+    )
+    parser.add_argument(
+        "--holdout-device",
+        default=None,
+        help="Optional device name to hold out when --split-mode=device-holdout.",
     )
     return parser
 
@@ -57,6 +63,7 @@ def main() -> None:
             dataset,
             mode=args.split_mode,
             random_seed=args.seed,
+            holdout_device_name=args.holdout_device,
         )
         trainer_state = ResidualTrainer().fit(train_dataset)
         metrics = ResidualEvaluator().evaluate(
@@ -97,19 +104,23 @@ def _resolve_dataset_path(args: argparse.Namespace, temp_dir: Path) -> Path:
         dtypes=_split_csv_arg(args.dtypes),
         size_buckets=_split_csv_arg(args.sizes),
     )
-    records = collect_gemm_bmm_profile_records(
-        plan=plan,
-        mode=args.mode,
-        num_warmup=args.warmup,
-        num_repeats=args.repeats,
-        seed=args.seed,
-        gpu_names=_split_csv_arg(args.gpu_names),
-    )
     dataset_path = temp_dir / f"phase3_validation.{args.format}"
-    if args.format == "jsonl":
-        write_profile_records_jsonl(records, dataset_path)
-    else:
-        write_profile_records_csv(records, dataset_path)
+    for round_id in range(args.rounds):
+        records = collect_gemm_bmm_profile_records(
+            plan=plan,
+            mode=args.mode,
+            num_warmup=args.warmup,
+            num_repeats=args.repeats,
+            seed=args.seed,
+            gpu_names=_split_csv_arg(args.gpu_names),
+        )
+        if args.rounds > 1:
+            records = [dict(record, round_id=round_id) for record in records]
+        append = round_id > 0
+        if args.format == "jsonl":
+            write_profile_records_jsonl(records, dataset_path, append=append)
+        else:
+            write_profile_records_csv(records, dataset_path, append=append)
     return dataset_path
 
 

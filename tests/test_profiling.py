@@ -7,6 +7,7 @@ from predictor.training import GemmBmmDatasetBuilder
 from predictor.training.profiling import (
     build_gemm_bmm_sampling_plan,
     collect_gemm_bmm_profile_records,
+    write_profile_records_csv,
     write_profile_records_jsonl,
 )
 
@@ -59,3 +60,38 @@ def test_mock_profile_records_include_measurement_metadata_and_are_dataset_compa
     assert "cuda_version" in first_record
     assert first_record["seed"] == 11
     assert len(dataset.samples) == len(records)
+
+
+def test_profile_record_writers_support_append_and_round_id(tmp_path: Path) -> None:
+    plan = build_gemm_bmm_sampling_plan(
+        families=("gemm",),
+        dtypes=("fp16",),
+        size_buckets=("small",),
+    )[:1]
+    base_records = collect_gemm_bmm_profile_records(
+        plan=plan,
+        mode="mock",
+        num_warmup=2,
+        num_repeats=3,
+        seed=5,
+        gpu_names=("mock_gpu_a",),
+    )
+    round_zero_records = [dict(record, round_id=0) for record in base_records]
+    round_one_records = [dict(record, round_id=1) for record in base_records]
+    jsonl_path = tmp_path / "records.jsonl"
+    csv_path = tmp_path / "records.csv"
+
+    write_profile_records_jsonl(round_zero_records, jsonl_path)
+    write_profile_records_jsonl(round_one_records, jsonl_path, append=True)
+    write_profile_records_csv(round_zero_records, csv_path)
+    write_profile_records_csv(round_one_records, csv_path, append=True)
+
+    jsonl_records = [
+        json.loads(line)
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    csv_lines = csv_path.read_text(encoding="utf-8").splitlines()
+
+    assert [record["round_id"] for record in jsonl_records] == [0, 1]
+    assert csv_lines[0].startswith("backend,")
+    assert len(csv_lines) == 3

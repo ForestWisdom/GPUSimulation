@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--gpu-names", default="mock_gpu_a,mock_gpu_b")
+    parser.add_argument("--rounds", type=int, default=1)
     return parser
 
 
@@ -43,20 +44,27 @@ def main() -> None:
         dtypes=_split_csv_arg(args.dtypes),
         size_buckets=_split_csv_arg(args.sizes),
     )
-    records = collect_gemm_bmm_profile_records(
-        plan=plan,
-        mode=args.mode,
-        num_warmup=args.warmup,
-        num_repeats=args.repeats,
-        seed=args.seed,
-        gpu_names=_split_csv_arg(args.gpu_names),
-    )
     output_path = Path(args.output)
-    if args.format == "jsonl":
-        write_profile_records_jsonl(records, output_path)
-    else:
-        write_profile_records_csv(records, output_path)
-    print(f"records_collected={len(records)}")
+    total_records = 0
+    for round_id in range(args.rounds):
+        records = collect_gemm_bmm_profile_records(
+            plan=plan,
+            mode=args.mode,
+            num_warmup=args.warmup,
+            num_repeats=args.repeats,
+            seed=args.seed,
+            gpu_names=_split_csv_arg(args.gpu_names),
+        )
+        if args.rounds > 1:
+            records = [dict(record, round_id=round_id) for record in records]
+        append = round_id > 0
+        if args.format == "jsonl":
+            write_profile_records_jsonl(records, output_path, append=append)
+        else:
+            write_profile_records_csv(records, output_path, append=append)
+        total_records += len(records)
+
+    print(f"records_collected={total_records}")
     print(f"output_path={output_path}")
     print(f"measurement_backend={args.mode}")
 
