@@ -6,41 +6,41 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from predictor.analytical import (
-    PlaceholderBaselineLatencyEstimator,
+    AnalyticalBaselineLatencyEstimator,
+    AnalyticalSchedulingSimulator,
+    AnalyticalTaskDecomposer,
     PlaceholderPipelineFeatureAnalyzer,
-    PlaceholderSchedulingSimulator,
-    PlaceholderTaskDecomposer,
 )
 from predictor.extractor import PlaceholderMetadataExtractor
 from predictor.models import PlaceholderResidualModel, PlaceholderUncertaintyModel
-from predictor.recognizer import PlaceholderKernelRecognizer
+from predictor.recognizer import HeuristicKernelRecognizer
 from predictor.types import KernelMetadata, LatencyPrediction
 
 
 @dataclass
 class KernelLatencyPredictor:
-    """Orchestrate the Phase 1 single-kernel prediction pipeline."""
+    """Orchestrate the single-kernel prediction pipeline."""
 
     extractor: PlaceholderMetadataExtractor
-    recognizer: PlaceholderKernelRecognizer
-    decomposer: PlaceholderTaskDecomposer
-    scheduler: PlaceholderSchedulingSimulator
+    recognizer: HeuristicKernelRecognizer
+    decomposer: AnalyticalTaskDecomposer
+    scheduler: AnalyticalSchedulingSimulator
     feature_analyzer: PlaceholderPipelineFeatureAnalyzer
-    baseline_estimator: PlaceholderBaselineLatencyEstimator
+    baseline_estimator: AnalyticalBaselineLatencyEstimator
     residual_model: PlaceholderResidualModel
     uncertainty_model: PlaceholderUncertaintyModel
 
     @classmethod
     def default(cls) -> "KernelLatencyPredictor":
-        """Build the default Phase 1 predictor stack."""
+        """Build the default predictor stack."""
 
         return cls(
             extractor=PlaceholderMetadataExtractor(),
-            recognizer=PlaceholderKernelRecognizer(),
-            decomposer=PlaceholderTaskDecomposer(),
-            scheduler=PlaceholderSchedulingSimulator(),
+            recognizer=HeuristicKernelRecognizer(),
+            decomposer=AnalyticalTaskDecomposer(),
+            scheduler=AnalyticalSchedulingSimulator(),
             feature_analyzer=PlaceholderPipelineFeatureAnalyzer(),
-            baseline_estimator=PlaceholderBaselineLatencyEstimator(),
+            baseline_estimator=AnalyticalBaselineLatencyEstimator(),
             residual_model=PlaceholderResidualModel(),
             uncertainty_model=PlaceholderUncertaintyModel(),
         )

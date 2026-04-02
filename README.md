@@ -4,11 +4,12 @@ A research prototype for single-kernel GPU latency prediction.
 
 ## v0 Scope
 
-Phase 1 only scaffolds the repository and public interfaces.
+Current repository status: Phase 2 implemented for GEMM/BMM analytical baseline only.
 
 - Single-kernel prediction only
 - No distributed inference
-- Placeholder implementations only
+- Real analytical baseline only for GEMM/BMM in Phase 2
+- Learned residual models are not implemented yet
 - Supported kernel families in v0:
   - GEMM/BMM
   - Attention
@@ -42,40 +43,41 @@ The 7 conceptual modules required by `AGENTS.md` are scaffolded as:
 
 ## Quick Start
 
-Run the Phase 1 test suite:
+Run the full test suite with the `sglang` conda environment:
 
 ```bash
-python -m pytest tests -q
+conda run -n sglang python -m pytest tests -q
 ```
 
-Run the Phase 1 demo script:
+Run the Phase 2 GEMM/BMM demo script:
 
 ```bash
-python scripts/demo_phase1.py
+conda run -n sglang python scripts/demo_phase2_gemm.py
 ```
 
-Run the placeholder CLI directly:
+Run the CLI directly for a GEMM example:
 
 ```bash
-python -m predictor.serving --name demo_kernel --family gemm_bmm --dimension m=128 --dimension n=128 --dimension k=64
+conda run -n sglang python -m predictor.serving --name demo_kernel --family gemm_bmm --dtype fp16 --dimension m=2048 --dimension n=2048 --dimension k=4096
 ```
 
 ## Implemented in This Phase
 
-- Scaffolded the repository under the required `predictor/`, `tests/`, and `scripts/` layout.
-- Added typed shared dataclasses for metadata, recognition, analytical plans, features, datasets, and predictions.
-- Added interface-style package boundaries and placeholder implementations for extraction, recognition, analytical processing, learned-model hooks, training, and serving.
-- Added a default single-kernel serving pipeline plus an operator-level aggregation helper.
-- Added a runnable demo script and a simple CLI entrypoint.
-- Added unit tests for each major module and an integration test that exercises the Phase 1 demo path.
+- Added heuristic GEMM/BMM kernel bucket recognition with `gemm.tensor_core`, `gemm.simt`, `bmm.tensor_core`, and `bmm.simt` buckets.
+- Added GEMM/BMM analytical task decomposition into operand load, MMA mainloop, and output store stages.
+- Added GEMM/BMM wave estimation using output tile count and SM count.
+- Added GEMM/BMM analytical baseline latency estimation using FLOPs, memory traffic, and a wave penalty term.
+- Kept non-GEMM/BMM families on placeholder paths so Phase 2 scope stays narrow.
+- Added Phase 2 unit tests plus a dedicated Phase 2 integration test and runnable demo script.
 
 ## Remaining Work
 
-- Phase 2: implement a real GEMM/BMM analytical baseline, including decomposition, wave estimation, and latency estimation.
-- Phase 3: add a lightweight learned residual head, dataset builder, training flow, and evaluation flow.
+- Phase 3: add a lightweight learned residual head, dataset builder, training flow, and evaluation flow for GEMM/BMM.
 - Phase 4: extend real logic to Attention and Vector/Fused vector kernels while reusing the same public interfaces.
 - Phase 5: replace placeholder uncertainty and aggregation behavior with real uncertainty or p90 prediction and end-to-end toy operator/model aggregation.
 
 ## Current Notes
 
-Phase 1 outputs are deterministic placeholders intended to prove package boundaries, test structure, and serving/demo entrypoints. They are not valid performance models yet.
+- The serving stack now produces analytical baseline latency for GEMM/BMM kernels.
+- Residual correction and uncertainty are still placeholder components and are intentionally not trained in Phase 2.
+- Attention, normalization, vector/fused vector, and fused MoE paths still use placeholder analytical behavior.

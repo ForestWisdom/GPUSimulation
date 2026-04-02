@@ -56,6 +56,14 @@ class KernelMetadata:
     extra: dict[str, str | int | float | bool] = field(default_factory=dict)
 
 
+def is_gemm_bmm_kernel(metadata: KernelMetadata) -> bool:
+    """Return whether metadata describes a GEMM/BMM-style kernel."""
+
+    if metadata.family_hint is KernelFamily.GEMM_BMM:
+        return True
+    return {"m", "n", "k"}.issubset(metadata.dimensions)
+
+
 @dataclass(frozen=True)
 class RecognitionResult:
     """Recognizer output for a kernel."""
@@ -84,10 +92,12 @@ class TaskPlan:
 
 @dataclass(frozen=True)
 class ScheduleEstimate:
-    """Placeholder scheduling estimate for a kernel task plan."""
+    """Scheduling estimate for a kernel task plan."""
 
     estimated_waves: int
     sm_utilization: float
+    tile_count: int = 0
+    tiles_per_wave: int = 0
 
 
 @dataclass(frozen=True)

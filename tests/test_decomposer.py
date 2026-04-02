@@ -1,19 +1,23 @@
-from predictor.analytical import PlaceholderTaskDecomposer
+from predictor.analytical import AnalyticalTaskDecomposer
 from predictor.types import KernelFamily, KernelMetadata
 
 
-def test_placeholder_task_decomposer_returns_single_kernel_task() -> None:
-    decomposer = PlaceholderTaskDecomposer()
+def test_gemm_task_decomposer_returns_gemm_pipeline_tasks() -> None:
+    decomposer = AnalyticalTaskDecomposer()
     metadata = KernelMetadata(
-        name="attention_kernel",
-        family_hint=KernelFamily.ATTENTION,
-        dimensions={"seq_len": 128, "heads": 8},
+        name="gemm_kernel",
+        family_hint=KernelFamily.GEMM_BMM,
+        dimensions={"m": 256, "n": 128, "k": 64},
         dtype="fp16",
         backend="cuda",
     )
 
     plan = decomposer.decompose(metadata)
 
-    assert plan.kernel_name == "attention_kernel"
-    assert len(plan.tasks) == 1
-    assert plan.tasks[0].name == "single_kernel"
+    assert plan.kernel_name == "gemm_kernel"
+    assert [task.name for task in plan.tasks] == [
+        "load_lhs_tiles",
+        "load_rhs_tiles",
+        "matrix_multiply_accumulate",
+        "store_output_tiles",
+    ]

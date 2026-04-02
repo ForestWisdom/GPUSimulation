@@ -19,12 +19,21 @@ class PlaceholderMetadataExtractor:
             if isinstance(value, (int, float))
         }
         tags = tuple(str(tag) for tag in raw_metadata.get("tags", ()))
-        known_keys = {"name", "family_hint", "dimensions", "dtype", "backend", "tags"}
+        known_keys = {"name", "family_hint", "dimensions", "dtype", "backend", "tags", "extra"}
         extra = {
             str(key): value
             for key, value in raw_metadata.items()
             if key not in known_keys and isinstance(value, (str, int, float, bool))
         }
+        raw_extra = raw_metadata.get("extra", {})
+        if isinstance(raw_extra, Mapping):
+            extra.update(
+                {
+                    str(key): value
+                    for key, value in raw_extra.items()
+                    if isinstance(value, (str, int, float, bool))
+                }
+            )
         return KernelMetadata(
             name=str(raw_metadata.get("name", "unknown_kernel")),
             family_hint=normalize_kernel_family(raw_metadata.get("family_hint")),
