@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import json
 import statistics
 from dataclasses import asdict, dataclass
@@ -109,15 +110,32 @@ def collect_gemm_bmm_profile_records(
             for index, spec in enumerate(specs)
         ]
     if mode == "torch":
-        return [
-            _torch_profile_record(
-                spec=spec,
-                num_warmup=num_warmup,
-                num_repeats=num_repeats,
-                seed=seed,
-            )
-            for spec in specs
-        ]
+        import torch
+
+        records: list[dict[str, object]] = []
+        skipped = 0
+        for spec in specs:
+            try:
+                records.append(
+                    _torch_profile_record(
+                        spec=spec,
+                        num_warmup=num_warmup,
+                        num_repeats=num_repeats,
+                        seed=seed,
+                    )
+                )
+            except torch.OutOfMemoryError:
+                skipped += 1
+                torch.cuda.empty_cache()
+                gc.collect()
+                print(
+                    "Skipping OOM profiling shape: "
+                    f"family={spec.family} dtype={spec.dtype} batch={spec.batch} "
+                    f"m={spec.m} n={spec.n} k={spec.k}",
+                )
+        if skipped:
+            print(f"skipped_oom_records={skipped}")
+        return records
     raise ValueError(f"Unsupported profiling mode: {mode}")
 
 

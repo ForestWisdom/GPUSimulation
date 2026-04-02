@@ -4,7 +4,7 @@ A research prototype for single-kernel GPU latency prediction.
 
 ## v0 Scope
 
-Current repository status: Phase 3.1 implemented for GEMM/BMM analytical baseline, Ridge residual head, and scalable real-data validation tooling.
+Current repository status: Phase 3.2 implemented for GEMM/BMM analytical baseline, Ridge residual head, scalable real-data validation tooling, and holdout error analysis.
 
 - Single-kernel prediction only
 - No distributed inference
@@ -85,6 +85,12 @@ Run the Phase 3.1 validation workflow end-to-end:
 conda run -n sglang python scripts/run_phase3_validation.py --mode mock --split-mode device-holdout --format jsonl --families gemm,bmm --dtypes fp16,bf16,fp32 --sizes small,medium,large --warmup 10 --repeats 20 --seed 7 --rounds 2
 ```
 
+Run the Phase 3.2 analysis pass on the merged real dataset:
+
+```bash
+conda run -n sglang python scripts/analyze_phase32_holdout.py --data artifacts/phase3_real_multi_gpu.jsonl --output-dir artifacts
+```
+
 ## Implemented in This Phase
 
 - Added heuristic GEMM/BMM kernel bucket recognition with `gemm.tensor_core`, `gemm.simt`, `bmm.tensor_core`, and `bmm.simt` buckets.
@@ -103,6 +109,7 @@ conda run -n sglang python scripts/run_phase3_validation.py --mode mock --split-
 - Added multi-round collection support so one command can append repeated runs of the same reproducible shape plan into one JSONL or CSV file, with `round_id` included when `--rounds > 1`.
 - Fixed the standalone training and evaluation script entrypoints so they run without requiring `PYTHONPATH=.`
 - Added validation workflow support for both `random` and `device-holdout` splits in the dedicated evaluation CLI and the Phase 3.1 end-to-end validation CLI.
+- Added a Phase 3.2 analysis module and CLI to diagnose holdout degradation with per-slice error breakdowns, residual diagnostics, and Ridge coefficient export.
 - Kept non-GEMM/BMM families on placeholder paths so Phase 3 scope stays narrow.
 
 ## Remaining Work
@@ -116,8 +123,19 @@ conda run -n sglang python scripts/run_phase3_validation.py --mode mock --split-
 - The default residual model is a small Ridge-regression pipeline and predicts additive residual milliseconds from analytical features only.
 - The Phase 3.1 validation workflow supports `random` and `device-holdout` split modes and reports residual MAE/RMSE plus baseline-only and baseline+residual latency MAE/MAPE.
 - The `device-holdout` path uses the collected GPU/device tag, which is stored as the device profile name and mirrored by `gpu_name` in the profiling records.
+- Phase 3.2 analysis writes CSV/JSON summaries under `artifacts/`, including per-slice MAE/RMSE tables, per-device residual diagnostics, and top Ridge coefficients from the standardized feature space.
 - Uncertainty remains a placeholder uplift and is intentionally unchanged in Phase 3.
 - Attention, normalization, vector/fused vector, and fused MoE paths still use placeholder analytical behavior.
+
+## Phase 3.2 Analysis
+
+The Phase 3.2 analysis pass is focused on diagnosing cross-device generalization, especially why `A40` holdout can regress relative to the analytical baseline. The analysis script:
+
+- trains comparison models for `random` split and per-device holdout
+- exports per-slice breakdowns for `gpu_name`, `family`, `dtype`, `size_bucket`, and `alignment_group`
+- reports `MAE`, `RMSE`, `mae_delta`, and `rmse_delta`
+- exports per-device residual-target and predicted-residual statistics
+- exports top Ridge coefficients and clearly notes that they come from the standardized feature space because the model is `StandardScaler + Ridge`
 
 ## Multi-GPU Data Collection
 
