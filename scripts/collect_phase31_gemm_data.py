@@ -1,0 +1,71 @@
+"""Collect GEMM/BMM profiling data for Phase 3.1 validation."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from predictor.training import (
+    build_gemm_bmm_sampling_plan,
+    collect_gemm_bmm_profile_records,
+    write_profile_records_csv,
+    write_profile_records_jsonl,
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the collection-script CLI parser."""
+
+    parser = argparse.ArgumentParser(description="Collect GEMM/BMM profiling records.")
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
+    parser.add_argument("--mode", choices=("mock", "torch"), default="mock")
+    parser.add_argument("--families", default="gemm,bmm")
+    parser.add_argument("--dtypes", default="fp16,bf16,fp32")
+    parser.add_argument("--sizes", default="small,medium,large")
+    parser.add_argument("--num-warmup", type=int, default=10)
+    parser.add_argument("--num-repeats", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--gpu-names", default="mock_gpu_a,mock_gpu_b")
+    return parser
+
+
+def main() -> None:
+    """Collect GEMM/BMM profiling records and write them to disk."""
+
+    args = build_parser().parse_args()
+    plan = build_gemm_bmm_sampling_plan(
+        families=_split_csv_arg(args.families),
+        dtypes=_split_csv_arg(args.dtypes),
+        size_buckets=_split_csv_arg(args.sizes),
+    )
+    records = collect_gemm_bmm_profile_records(
+        plan=plan,
+        mode=args.mode,
+        num_warmup=args.num_warmup,
+        num_repeats=args.num_repeats,
+        seed=args.seed,
+        gpu_names=_split_csv_arg(args.gpu_names),
+    )
+    output_path = Path(args.output)
+    if args.format == "jsonl":
+        write_profile_records_jsonl(records, output_path)
+    else:
+        write_profile_records_csv(records, output_path)
+    print(f"records_collected={len(records)}")
+    print(f"output_path={output_path}")
+    print(f"measurement_backend={args.mode}")
+
+
+def _split_csv_arg(value: str) -> tuple[str, ...]:
+    """Split a comma-separated CLI argument into a tuple."""
+
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+if __name__ == "__main__":
+    main()

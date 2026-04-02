@@ -46,10 +46,17 @@ class ResidualTrainer:
 
 def split_dataset(
     dataset: ResidualTrainingDataset,
+    mode: str = "random",
     test_fraction: float = 0.2,
     random_seed: int = 7,
+    holdout_device_name: str | None = None,
 ) -> tuple[ResidualTrainingDataset, ResidualTrainingDataset]:
     """Split a dataset into deterministic train/test partitions."""
+
+    if mode == "device-holdout":
+        return _device_holdout_split(dataset, holdout_device_name)
+    if mode != "random":
+        raise ValueError(f"Unsupported split mode: {mode}")
 
     samples = list(dataset.samples)
     if len(samples) < 2:
@@ -70,4 +77,33 @@ def split_dataset(
     return (
         ResidualTrainingDataset(samples=tuple(train_samples)),
         ResidualTrainingDataset(samples=tuple(test_samples)),
+    )
+
+
+def _device_holdout_split(
+    dataset: ResidualTrainingDataset,
+    holdout_device_name: str | None,
+) -> tuple[ResidualTrainingDataset, ResidualTrainingDataset]:
+    """Split a dataset by holding out one entire device."""
+
+    device_names = sorted({sample.device_profile.name for sample in dataset.samples})
+    if not device_names:
+        return dataset, ResidualTrainingDataset(samples=())
+    selected_holdout = holdout_device_name or device_names[-1]
+    train_samples = tuple(
+        sample for sample in dataset.samples if sample.device_profile.name != selected_holdout
+    )
+    test_samples = tuple(
+        sample for sample in dataset.samples if sample.device_profile.name == selected_holdout
+    )
+    if not train_samples or not test_samples:
+        return split_dataset(
+            dataset,
+            mode="random",
+            test_fraction=0.2,
+            random_seed=7,
+        )
+    return (
+        ResidualTrainingDataset(samples=train_samples),
+        ResidualTrainingDataset(samples=test_samples),
     )

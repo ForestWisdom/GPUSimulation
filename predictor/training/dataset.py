@@ -239,7 +239,7 @@ class GemmBmmDatasetBuilder:
             "backend": row.get("backend", "unknown"),
             "dimensions": dimensions,
             "device_profile": {
-                "name": row.get("device_name", DEFAULT_DEVICE_PROFILE.name),
+                "name": row.get("device_name") or row.get("gpu_name") or DEFAULT_DEVICE_PROFILE.name,
                 "sm_count": int(row.get("sm_count", DEFAULT_DEVICE_PROFILE.sm_count)),
                 "memory_bandwidth_bytes_per_s": float(
                     row.get(
@@ -261,4 +261,12 @@ class GemmBmmDatasetBuilder:
                 ),
             },
             "measured_latency_ms": float(row["measured_latency_ms"]),
+            "latency_std_ms": float(row["latency_std_ms"]) if row.get("latency_std_ms") else None,
+            "num_warmup": int(row["num_warmup"]) if row.get("num_warmup") else None,
+            "num_repeats": int(row["num_repeats"]) if row.get("num_repeats") else None,
+            "measurement_backend": row.get("measurement_backend"),
+            "gpu_name": row.get("gpu_name"),
+            "torch_version": row.get("torch_version"),
+            "cuda_version": row.get("cuda_version"),
+            "seed": int(row["seed"]) if row.get("seed") else None,
         }
