@@ -76,13 +76,13 @@ conda run -n sglang python scripts/eval_phase3_residual.py --data path/to/runs.j
 Collect GEMM/BMM profiling data:
 
 ```bash
-conda run -n sglang python scripts/collect_phase31_gemm_data.py --output artifacts/gemm_profiles.jsonl --format jsonl --mode mock
+conda run -n sglang python scripts/collect_phase3_gemm_data.py --output artifacts/gemm_profiles.jsonl --format jsonl --mode mock --families gemm,bmm --dtypes fp16,bf16,fp32 --sizes small,medium,large --warmup 10 --repeats 20 --seed 7
 ```
 
 Run the Phase 3.1 validation workflow end-to-end:
 
 ```bash
-conda run -n sglang python scripts/run_phase31_validation.py --collect-mode mock --split-mode device-holdout --output-format jsonl
+conda run -n sglang python scripts/run_phase3_validation.py --mode mock --split-mode device-holdout --format jsonl --families gemm,bmm --dtypes fp16,bf16,fp32 --sizes small,medium,large --warmup 10 --repeats 20 --seed 7
 ```
 
 ## Implemented in This Phase
@@ -123,13 +123,16 @@ To collect data on multiple GPUs, run the collection script separately on each m
 Example:
 
 ```bash
-conda run -n sglang python scripts/collect_phase31_gemm_data.py \
+conda run -n sglang python scripts/collect_phase3_gemm_data.py \
   --output artifacts/h100_profiles.jsonl \
   --format jsonl \
   --mode torch \
   --families gemm,bmm \
   --dtypes fp16,bf16,fp32 \
-  --sizes small,medium,large
+  --sizes small,medium,large \
+  --warmup 20 \
+  --repeats 50 \
+  --seed 7
 ```
 
 Repeat the same command on another GPU and concatenate the JSONL outputs:
@@ -141,5 +144,5 @@ cat artifacts/h100_profiles.jsonl artifacts/a100_profiles.jsonl > artifacts/mult
 Then evaluate with a device-holdout split:
 
 ```bash
-conda run -n sglang python scripts/run_phase31_validation.py --data artifacts/multi_gpu_profiles.jsonl --split-mode device-holdout
+conda run -n sglang python scripts/run_phase3_validation.py --data artifacts/multi_gpu_profiles.jsonl --split-mode device-holdout
 ```
