@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 
 class KernelFamily(str, Enum):
@@ -210,6 +212,36 @@ class LatencyPrediction:
 
 
 @dataclass(frozen=True)
+class ResidualTrainingSample:
+    """One GEMM/BMM sample used to train the residual model."""
+
+    metadata: KernelMetadata
+    device_profile: DeviceProfile
+    features: FeatureVector
+    analytical_baseline_ms: float
+    measured_latency_ms: float
+    residual_target_ms: float
+    implementation_bucket: str
+
+
+@dataclass(frozen=True)
+class ResidualTrainingDataset:
+    """Collection of GEMM/BMM residual-training samples."""
+
+    samples: tuple[ResidualTrainingSample, ...]
+
+
+@dataclass(frozen=True)
+class ResidualTrainerState:
+    """State returned after fitting a residual model."""
+
+    model_name: str
+    sample_count: int
+    model: Any
+    feature_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AggregationSummary:
     """Aggregated latency summary across multiple kernels."""
 
@@ -240,3 +272,6 @@ class TrainerState:
 
     model_name: str
     sample_count: int
+
+
+PathLike = str | Path

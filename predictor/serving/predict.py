@@ -12,7 +12,7 @@ from predictor.analytical import (
     AnalyticalTaskDecomposer,
 )
 from predictor.extractor import PlaceholderMetadataExtractor
-from predictor.models import PlaceholderResidualModel, PlaceholderUncertaintyModel
+from predictor.models import PlaceholderUncertaintyModel, ResidualModel, ResidualRidgeModel
 from predictor.recognizer import HeuristicKernelRecognizer
 from predictor.types import (
     DEFAULT_DEVICE_PROFILE,
@@ -32,7 +32,7 @@ class KernelLatencyPredictor:
     scheduler: AnalyticalSchedulingSimulator
     feature_analyzer: AnalyticalPipelineFeatureAnalyzer
     baseline_estimator: AnalyticalBaselineLatencyEstimator
-    residual_model: PlaceholderResidualModel
+    residual_model: ResidualModel
     uncertainty_model: PlaceholderUncertaintyModel
 
     @classmethod
@@ -53,7 +53,7 @@ class KernelLatencyPredictor:
             baseline_estimator=AnalyticalBaselineLatencyEstimator(
                 device_profile=device_profile,
             ),
-            residual_model=PlaceholderResidualModel(),
+            residual_model=ResidualRidgeModel(),
             uncertainty_model=PlaceholderUncertaintyModel(),
         )
 
@@ -65,8 +65,8 @@ class KernelLatencyPredictor:
         schedule = self.scheduler.simulate(plan, metadata)
         features = self.feature_analyzer.analyze(metadata, schedule)
         baseline = self.baseline_estimator.estimate(metadata, plan, schedule, features)
-        residual = self.residual_model.predict(features, baseline.latency_ms)
-        mean_latency_ms = round(baseline.latency_ms + residual, 4)
+        residual = self.residual_model.predict(features)
+        mean_latency_ms = round(max(1e-6, baseline.latency_ms + residual), 6)
         p90_latency_ms = self.uncertainty_model.predict_p90(features, mean_latency_ms)
         return LatencyPrediction(
             kernel_name=metadata.name,
